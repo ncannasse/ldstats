@@ -1,3 +1,4 @@
+import Categorize;
 
 @:enum abstract Category(Int) {
 	var Overall = 0;
@@ -213,7 +214,7 @@ class Main {
 		sys.io.File.saveContent(dbFile, haxe.Json.stringify(games, null, "\t"));
 	}
 
-	function fetchData( g : GameInfos ) {
+	function fetchData( g : GameInfos, i : Int ) {
 		if( g.data == null ) throw "Missing data for #" + g.uid;
 
 		var l = g.data.links[0];
@@ -235,7 +236,7 @@ class Main {
 
 		if( sys.FileSystem.exists(dat) ) return;
 
-		log("Saving " + g.title+"#" + g.uid + " (" + l.title + ")");
+		log("Saving " + g.title+"#" + g.uid + " (" + l.title + ") "+(Std.int(i*1000/games.length)/10)+"%");
 
 
 		try sys.FileSystem.deleteFile(dat + ".tmp") catch( e : Dynamic ) {};
@@ -245,6 +246,25 @@ class Main {
 
 		sys.FileSystem.rename(dat + ".tmp", dat);
 
+	}
+
+	function fetchGameDatas() {
+		var out = new neko.vm.Deque();
+		var wait = new neko.vm.Deque();
+		for( i in 0...games.length )
+			out.add(i);
+		for( i in 0...3 )
+			neko.vm.Thread.create(function() {
+				while( true ) {
+					var g = out.pop(false);
+					if( g == null ) break;
+					fetchData(games[g], g);
+				}
+				wait.add(null);
+			});
+		// wait
+		for( i in 0...10 )
+			wait.pop(true);
 	}
 
 	static function main() {
@@ -264,22 +284,7 @@ class Main {
 				case "data":
 					if( m.ld == null ) throw "Missing #LD";
 					m.loadData();
-					var out = new neko.vm.Deque();
-					var wait = new neko.vm.Deque();
-					for( g in m.games )
-						out.add(g);
-					for( i in 0...3 )
-						neko.vm.Thread.create(function() {
-							while( true ) {
-								var g = out.pop(false);
-								if( g == null ) break;
-								m.fetchData(g);
-							}
-							wait.add(null);
-						});
-					// wait
-					for( i in 0...10 )
-						wait.pop(true);
+					m.fetchGameDatas();
 				case x:
 					throw "Unknow arg " + x;
 				}
