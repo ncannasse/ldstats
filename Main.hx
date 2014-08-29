@@ -241,7 +241,7 @@ class Main {
 
 		try sys.FileSystem.deleteFile(dat + ".tmp") catch( e : Dynamic ) {};
 
-		if( Sys.command("wget", ["-O", dat + ".tmp", "--tries", "3", url]) < 0 )
+		if( Sys.command("wget", ["-O", dat + ".tmp", "--tries", "3", "--no-check-certificate", url]) < 0 )
 			return;
 
 		sys.FileSystem.rename(dat + ".tmp", dat);
