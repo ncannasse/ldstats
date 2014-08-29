@@ -9,6 +9,7 @@ import Categorize;
 	var Audio = 5;
 	var Humor = 6;
 	var Mood = 7;
+	var Community = 8; // LD <= 22
 	public function toInt() return this;
 }
 
@@ -45,12 +46,12 @@ class Main {
 
 	function load( ld : Int ) {
 		this.ld = ld;
-		dbFile = "ld" + ld + ".dat";
+		dbFile = "data/ld" + ld + ".dat";
 		games = try haxe.Json.parse(sys.io.File.getContent(dbFile)) catch( e : Dynamic ) [];
 	}
 
 	function loadData() {
-		dataDir = "ld" + ld + "_data";
+		dataDir = "data/ld" + ld;
 		if( !sys.FileSystem.exists(dataDir) ) sys.FileSystem.createDirectory(dataDir);
 	}
 
@@ -195,6 +196,7 @@ class Main {
 			case "Audio": Audio;
 			case "Humor": Humor;
 			case "Mood": Mood;
+			case "Community": Community;
 			case "Coolness":
 				g.data.coolness = Std.int(rate);
 				continue;
