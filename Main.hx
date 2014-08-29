@@ -136,7 +136,7 @@ class Main {
 		for( l in linkData ) {
 			var r = ~/href="([^"]+)" target='_blank'>([^<]+)<\/a>/;
 			if( !r.match(l) ) throw "Invalid link #"+l+"# in " + linkData;
-			links.push( { url : r.matched(1), title : r.matched(2) } );
+			links.push( { url : r.matched(1), title : utf(r.matched(2)) } );
 		}
 		g.data = {
 			jam : false,
