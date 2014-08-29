@@ -220,6 +220,10 @@ class Main {
 		if( g.data == null ) throw "Missing data for #" + g.uid;
 
 		var l = g.data.links[0];
+		if( l == null ) {
+			log("Not link for #" + g.uid);
+			return;
+		}
 
 		var url = StringTools.htmlUnescape(l.url);
 
