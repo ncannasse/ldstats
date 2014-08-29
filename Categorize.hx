@@ -8,6 +8,8 @@ abstract Techno(String) {
 	var Csharp = "csharp";
 	var GameMaker = "gamemaker";
 	var Unity = "unity";
+	var Unknown = "unknown";
+	var NoData = "nodata"; // we couldn't tell
 }
 
 @:enum
@@ -16,9 +18,10 @@ abstract Library(String) {
 	var Love = "love";
 	var SDL = "sdl";
 	var Monogame = "monogame";
-	var JOGL = "jogl"; // Java OpenGL
+	var JOGL = "jogl"; // Java OpenGL binding
 	var DirectX = "directx";
 	var SFML = "sfml"; // c++ lib
+	var LWJGL = "lwjgl"; // Java Lib
 }
 
 typedef CatInfos = {
@@ -104,6 +107,50 @@ class Categorize {
 			{
 				tech : GameMaker
 			},
+
+		"*.exe" =>
+			{
+				tech : Cpp,
+				priority : -100,
+			},
+
+		"org/lwjgl/*" =>
+			{
+				tech : Java,
+				lib : LWJGL,
+			}
 	];
+
+	static var EREGS = null;
+	public static function check( files : Array<String>, cat : Main.GameCategory ) {
+		if( EREGS == null ) {
+			var files = [for( f in FILES.keys() ) { f : f, d : FILES.get(f) } ];
+			files.sort(function(f1, f2) {
+				var p1 = f1.d.priority == null ? 0 : f1.d.priority;
+				var p2 = f2.d.priority == null ? 0 : f2.d.priority;
+				return p2 - p1;
+			});
+			EREGS = [for( f in files ) {
+				var r = f.f.toLowerCase().split(".").join("\\.");
+				if( StringTools.startsWith(r, "*") )
+					r = r.substr(1);
+				else
+					r = "^" + r;
+				if( StringTools.endsWith(r, "*") )
+					r = r.substr(0, -1);
+				else
+					r = r + "$";
+				{ r : new EReg(r, ""), d : f.d };
+			}];
+		}
+		files = [for( f in files ) f.toLowerCase()];
+		for( r in EREGS ) {
+			for( f in files )
+				if( r.r.match(f) ) {
+					if( r.d.lib != null ) cat.lib = r.d.lib;
+					if( r.d.tech != null ) cat.tech = r.d.tech;
+				}
+		}
+	}
 
 }

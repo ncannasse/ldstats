@@ -1,3 +1,3 @@
 @echo off
-neko ldstats 29 data
+neko ldstats 28 categorize
 pause

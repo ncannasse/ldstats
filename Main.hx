@@ -19,6 +19,7 @@ typedef GameInfos = {
 	var title : String;
 	var user : String;
 	@:optional var data : GameData;
+	@:optional var category : GameCategory;
 }
 
 typedef GameData = {
@@ -29,6 +30,11 @@ typedef GameData = {
 	var rankings : Array<Int>;
 	var coolness : Int;
 	var screens : Array<{ thumb : String, url : String }>;
+}
+
+typedef GameCategory = {
+	var tech : Techno;
+	var lib : Library;
 }
 
 typedef GamesDB = Array<GameInfos>
@@ -47,12 +53,8 @@ class Main {
 	function load( ld : Int ) {
 		this.ld = ld;
 		dbFile = "data/ld" + ld + ".dat";
-		games = try haxe.Json.parse(sys.io.File.getContent(dbFile)) catch( e : Dynamic ) [];
-	}
-
-	function loadData() {
 		dataDir = "data/ld" + ld;
-		if( !sys.FileSystem.exists(dataDir) ) sys.FileSystem.createDirectory(dataDir);
+		games = try haxe.Json.parse(sys.io.File.getContent(dbFile)) catch( e : Dynamic ) [];
 	}
 
 	function fetch() {
@@ -81,10 +83,8 @@ class Main {
 			save();
 		}
 
-		for( i in 0...games.length )
-			fetchGame(games[i], i);
-
-		log("Done "+games.length+" games");
+		for( g in games )
+			fetchGame(g);
 	}
 
 	function utf( s : String ) {
@@ -127,17 +127,24 @@ class Main {
 		return e.matched(match);
 	}
 
-	function fetchGame( g : GameInfos, i : Int ) {
+	function progress( g : GameInfos ) {
+		return (Std.int(games.indexOf(g) * 1000 / games.length) / 10) + "%";
+	}
+
+	function fetchGame( g : GameInfos ) {
 		if( g.data != null ) return;
-		log("Fetching " + g.title+"#" + g.uid+" "+(Std.int(i*1000/games.length)/10)+"%");
-		var h = get("http://www.ludumdare.com/compo/ludum-dare-"+ld+"/?action=preview&uid=" + g.uid);
+		log("Fetching " + g.title+"#" + g.uid+" "+progress(g));
+		var h = get("http://www.ludumdare.com/compo/ludum-dare-" + ld + "/?action=preview&uid=" + g.uid);
+
+		h = h.split("\r\n").join("\n").split("\n").join(" ");
+
 		var links = [];
 		var linkData = extract(h, ~/<p class='links'>(.*?)<\/p>/).split("<a ");
 		linkData.shift();
 		for( l in linkData ) {
 			var r = ~/href="([^"]+)" target='_blank'>([^<]+)<\/a>/;
 			if( !r.match(l) ) throw "Invalid link #"+l+"# in " + linkData;
-			links.push( { url : r.matched(1), title : utf(r.matched(2)) } );
+			links.push( { url : StringTools.trim(r.matched(1)), title : utf(r.matched(2)) } );
 		}
 		g.data = {
 			jam : false,
@@ -216,7 +223,45 @@ class Main {
 		sys.io.File.saveContent(dbFile, haxe.Json.stringify(games, null, "\t"));
 	}
 
-	function fetchData( g : GameInfos, i : Int ) {
+	function dataFile( g : GameInfos ) {
+		if( g.data == null ) return null;
+		var l = g.data.links[0];
+		if( l == null ) return null;
+		var url = StringTools.htmlUnescape(l.url);
+		var ext = url.split("/").pop().split(".");
+		var ext = if( ext.length == 1 ) "html" else ext.pop().toLowerCase();
+		if( ext.length < 2 || !~/^[a-z]+$/.match(ext) ) ext = "html";
+		switch( ext ) {
+		case "exe", "com", "bat": ext += "_";
+		default:
+		}
+		var file = dataDir + "/" + g.uid + "." + ext;
+		return file;
+	}
+
+	function categorize( g : GameInfos ) {
+		var dat = dataFile(g);
+		if( dat == null || !sys.FileSystem.exists(dat) )
+			return;
+
+		var cat : GameCategory = {
+			tech : null,
+			lib : null,
+		};
+
+		var content = sys.io.File.getBytes(dat);
+		if( content.get(0) == 0x50 && content.get(1) == 0x4B && content.get(2) == 0x03 && content.get(3) == 0x04 ) {
+			log("Categorize #" + g.uid + " " + progress(g));
+			if( dat.split(".").pop() == "jar" )
+				cat.tech = Java;
+			// ZIP FILE
+			var z = try haxe.zip.Reader.readZip(new haxe.io.BytesInput(content)) catch( e : Dynamic ) { cat.tech = NoData; new List(); };
+			Categorize.check([for( f in z ) f.fileName], cat);
+			log(cat);
+		}
+	}
+
+	function fetchData( g : GameInfos ) {
 		if( g.data == null ) throw "Missing data for #" + g.uid;
 
 		var l = g.data.links[0];
@@ -224,26 +269,12 @@ class Main {
 			log("Not link for #" + g.uid);
 			return;
 		}
-
 		var url = StringTools.htmlUnescape(l.url);
-
-
-		var ext = url.split("/").pop().split(".");
-		var ext = if( ext.length == 1 ) "html" else ext.pop().toLowerCase();
-
-		if( ext.length < 2 || !~/^[a-z]+$/.match(ext) ) ext = "html";
-
-		switch( ext ) {
-		case "exe", "com", "bat": ext += "_";
-		default:
-		}
-
-		var dat = dataDir + "/" + g.uid + "." + ext;
+		var dat = dataFile(g);
 
 		if( sys.FileSystem.exists(dat) ) return;
 
-		log("Saving " + g.title+"#" + g.uid + " (" + l.title + ") "+(Std.int(i*1000/games.length)/10)+"%");
-
+		log("Saving " + g.title+"#" + g.uid + " (" + l.title + ") " + progress(g));
 
 		try sys.FileSystem.deleteFile(dat + ".tmp") catch( e : Dynamic ) {};
 
@@ -251,20 +282,19 @@ class Main {
 			return;
 
 		sys.FileSystem.rename(dat + ".tmp", dat);
-
 	}
 
 	function fetchGameDatas() {
 		var out = new neko.vm.Deque();
 		var wait = new neko.vm.Deque();
-		for( i in 0...games.length )
-			out.add(i);
+		for( g in games )
+			out.add(g);
 		for( i in 0...3 )
 			neko.vm.Thread.create(function() {
 				while( true ) {
 					var g = out.pop(false);
 					if( g == null ) break;
-					fetchData(games[g], g);
+					fetchData(g);
 				}
 				wait.add(null);
 			});
@@ -289,12 +319,21 @@ class Main {
 					m.fetch();
 				case "data":
 					if( m.ld == null ) throw "Missing #LD";
-					m.loadData();
+					if( !sys.FileSystem.exists(m.dataDir) ) sys.FileSystem.createDirectory(m.dataDir);
 					m.fetchGameDatas();
+				case "categorize":
+					if( m.ld == null ) throw "Missing #LD";
+					var count = 0;
+					for( g in m.games ) {
+						m.categorize(g);
+						if( count++ > 10 ) break;
+					}
 				case x:
 					throw "Unknow arg " + x;
 				}
 			}
+			if( m.games != null )
+				m.log("Done "+m.games.length+" games");
 		} catch( e : Dynamic ) {
 			var str = Std.string(e);
 			sys.io.File.saveContent("error.log", str);
