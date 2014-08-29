@@ -53,7 +53,7 @@ class Main {
 	function load( ld : Int ) {
 		this.ld = ld;
 		dbFile = "data/ld" + ld + ".dat";
-		dataDir = "data/ld" + ld;
+		dataDir = "games/ld" + ld;
 		games = try haxe.Json.parse(sys.io.File.getContent(dbFile)) catch( e : Dynamic ) [];
 	}
 
