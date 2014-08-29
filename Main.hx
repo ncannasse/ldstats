@@ -299,7 +299,7 @@ class Main {
 				wait.add(null);
 			});
 		// wait
-		for( i in 0...10 )
+		for( i in 0...3 )
 			wait.pop(true);
 	}
 
