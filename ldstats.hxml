@@ -1,3 +1,4 @@
 -cp .
 -neko ldstats.n
 -main Main
+-lib format

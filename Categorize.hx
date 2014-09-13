@@ -10,6 +10,15 @@ abstract Techno(String) {
 	var Unity = "unity";
 	var Unknown = "unknown";
 	var NoData = "nodata"; // we couldn't tell
+	var JS = "js";
+	var Flash = "flash";
+	var Dart = "dart";
+	var Construct2 = "construct2";
+	var Stencyl = "stencyl";
+	var Haxe = "haxe";
+	var Binary = "binary"; // unknown executable
+	var CantDownloadDirectly = "nodl";
+	public function toString() return this;
 }
 
 @:enum
@@ -22,6 +31,20 @@ abstract Library(String) {
 	var DirectX = "directx";
 	var SFML = "sfml"; // c++ lib
 	var LWJGL = "lwjgl"; // Java Lib
+	var UnityWebPlayer = "unitywebplayer";
+	var Phaser = "phaser";
+	var MelonJS = "melonjs";
+	var FlashPunk = "flashpunk";
+	var Flixel = "flixel";
+	var NME = "nme";
+	var HaxeFlixel = "haxeflixel";
+	var XNA = "xna";
+	var JawsJS = "jawsjs";
+	var NMEBinary = "nmebin";
+	var EaseIJS = "easeijs";
+	var AXGL = "axgl";
+	var OpenFL = "openfl";
+	public function toString() return this;
 }
 
 typedef CatInfos = {
@@ -72,12 +95,21 @@ class Categorize {
 		"UnityEngine.dll" =>
 			{
 				tech : Unity,
+				priority : 10,
+			},
+		"phaser.min.js" =>
+			{
+				tech : JS,
+				lib : Phaser,
 			},
 		"YoYo([0-9]+)" => // OSX
 			{
 				tech : GameMaker,
 			},
-
+		"dart.js" =>
+			{
+				tech : Dart,
+			},
 		"*.jar" =>
 			{
 				tech : Java,
@@ -108,9 +140,21 @@ class Categorize {
 				tech : GameMaker
 			},
 
-		"*.exe" =>
+		"*.xnb" =>
 			{
 				tech : Cpp,
+				lib : XNA,
+			},
+
+		"*.swf" =>
+			{
+				tech : Flash,
+				priority : -50,
+			},
+
+		"*.exe" =>
+			{
+				tech : Binary,
 				priority : -100,
 			},
 
@@ -118,7 +162,31 @@ class Categorize {
 			{
 				tech : Java,
 				lib : LWJGL,
-			}
+			},
+
+		"c2runtime.js" =>
+			{
+				tech : Construct2,
+				priority : 10,
+			},
+
+		"jaws.js" => { tech : JS, lib : JawsJS },
+
+		"easeljs-[0-9.]+.min.js" => { tech : JS, lib : EaseIJS },
+
+		"org.axgl.*" => { tech : Flash, lib : AXGL },
+
+		"net.flashpunk.Engine" => {	lib : FlashPunk },
+		"org.flixel.*" => { lib : Flixel },
+		"stencyl.api.engine.*" => { tech : Stencyl, priority : 10 },
+		"com.stencyl.*" => { tech : Stencyl, priority : 10 }, // stencyl 2
+		"nme.NME_*" => { tech : Haxe, lib : NME, priority : 10 },
+		"NME_assets_*" => { tech : Haxe, lib : NME, priority : 9 },
+		"nme.ndll" => { tech : Haxe, lib : NMEBinary, priority : 10 },
+		"haxe.*" => { tech : Haxe, priority : 9 },
+		"flash.Boot" => { tech : Haxe, priority : 8 },
+		"openfl.Assets" => { tech : Haxe, lib : OpenFL, priority : 11 },
+		"__ASSET__flixel_img_logo_haxeflixel_svg" => { tech : Haxe, lib : HaxeFlixel, priority : 11 },
 	];
 
 	static var EREGS = null;
@@ -128,7 +196,7 @@ class Categorize {
 			files.sort(function(f1, f2) {
 				var p1 = f1.d.priority == null ? 0 : f1.d.priority;
 				var p2 = f2.d.priority == null ? 0 : f2.d.priority;
-				return p2 - p1;
+				return p1 - p2;
 			});
 			EREGS = [for( f in files ) {
 				var r = f.f.toLowerCase().split(".").join("\\.");
@@ -151,6 +219,19 @@ class Categorize {
 					if( r.d.tech != null ) cat.tech = r.d.tech;
 				}
 		}
+	}
+
+	public static function isFinal( tech : Techno, lib : Library ) {
+		if( tech != null && lib != null )
+			return true;
+		switch( tech ) {
+		case Dart, Unity, GameMaker, Construct2, Stencyl:
+			return true;
+		case CantDownloadDirectly, NoData:
+			return true;
+		default:
+		}
+		return false;
 	}
 
 }

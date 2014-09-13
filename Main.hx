@@ -239,17 +239,58 @@ class Main {
 		return file;
 	}
 
+
 	function categorize( g : GameInfos ) {
+
 		var dat = dataFile(g);
+
 		if( dat == null || !sys.FileSystem.exists(dat) )
-			return;
+			return null;
 
 		var cat : GameCategory = {
 			tech : null,
 			lib : null,
 		};
+		checkCategory(g, cat, dat);
+
+		//if( Categorize.isFinal(cat.tech, cat.lib) )
+		//	sys.FileSystem.deleteFile(dat);
+
+		trace(g.uid, cat);
+		return cat;
+	}
+
+
+	function checkCategory( g : GameInfos, cat : GameCategory, dat : String ) {
+
+		// we don't know how to directly download the file from these :'(
+		var url = g.data.links[0].url;
+		for( r in ["http://gamejolt.com", "https://drive.google.com/file", "https://app.box.com/", "http://www.mediafire.com"] ) {
+			if( StringTools.startsWith(url, r) ) {
+				cat.tech = CantDownloadDirectly;
+				return;
+			}
+		}
+
+
+
+		for( l in g.data.links )
+			switch( l.title.toLowerCase() ) {
+			case "love", "löve":
+				cat.tech = Lua;
+				cat.lib = Love;
+				return;
+			default:
+			}
 
 		var content = sys.io.File.getBytes(dat);
+
+		if( content.length == 0 ) {
+			cat.tech = NoData;
+			return;
+		}
+
+		// ZIP / JAR
 		if( content.get(0) == 0x50 && content.get(1) == 0x4B && content.get(2) == 0x03 && content.get(3) == 0x04 ) {
 			log("Categorize #" + g.uid + " " + progress(g));
 			if( dat.split(".").pop() == "jar" )
@@ -257,8 +298,229 @@ class Main {
 			// ZIP FILE
 			var z = try haxe.zip.Reader.readZip(new haxe.io.BytesInput(content)) catch( e : Dynamic ) { cat.tech = NoData; new List(); };
 			Categorize.check([for( f in z ) f.fileName], cat);
-			log(cat);
+			return;
 		}
+
+		function use7Z() {
+			// .rar
+			if( content.get(0) == 'R'.code && content.get(1) == 'a'.code && content.get(2) == 'r'.code && content.get(3) == '!'.code )
+				return true;
+			// .7z
+			if( content.get(0) == '7'.code && content.get(1) == 'z'.code )
+				return true;
+			return false;
+		}
+		if( use7Z() ) {
+			var outDir = dataDir + "/" + g.uid + "_files";
+			if( !sys.FileSystem.exists(outDir) ) {
+				if( Sys.command("7z x -y -o" + outDir + " " + dat) < 0 )
+					return;
+			}
+			var files = [];
+			function lookRec( dir ) {
+				for( f in sys.FileSystem.readDirectory(dir) ) {
+					var path = dir + "/" + f;
+					files.push(f);
+					if( sys.FileSystem.isDirectory(path) )
+						lookRec(path);
+				}
+			}
+			lookRec(outDir);
+			Categorize.check(files, cat);
+			return;
+		}
+
+		var contentStr = content.toString();
+
+		if( contentStr.indexOf("https://ssl-webplayer.unity3d.com") != -1 || contentStr.indexOf("http://unity3d.com/webplayer") != -1 ) {
+			cat.tech = Unity;
+			cat.lib = UnityWebPlayer;
+			return;
+		}
+
+		var flashFiles = [], jsScripts = [];
+
+		~/["']([-a-zA-Z0-9_.:\/?;=%]+\.[sS][wW][fF])(\?[^'"]*)?["']/g.map(contentStr, function(r) { flashFiles.push(r.matched(1)); return ""; } );
+		~/[sS][rR][cC][ \t]*=[ \t]*["']([-a-zA-Z0-9_.:\/;=%]+\.[jJ][sS](\?[^'"]*)?)["']/g.map(contentStr, function(r) { jsScripts.push(r.matched(1)); return ""; } );
+
+		for( f in flashFiles.copy() ) {
+			var fl = f.toLowerCase();
+			for( r in ["expressinstall.swf", "internal.kongregate.com","googlevideoadshell","cdn2.kongcdn.com", "cloudfront.net"] ) {
+				if( fl.indexOf(r) != -1 ) {
+					flashFiles.remove(f);
+					break;
+				}
+			}
+		}
+
+		for( s in jsScripts.copy() ) {
+			var sl = s.toLowerCase();
+			for( r in ["angularjs", "bootstrap.min", "facebook.net", "apis.google.com", "jquery", "swfobject","show_ads","twitter.com","facebook.com","modernizr","boxcdn.net","cloudfront.net","gravatar.com",".wp.com","google-analytics.com"] )
+				if( sl.indexOf(r) != -1 ) {
+					jsScripts.remove(s);
+					break;
+				}
+			if( sl.indexOf("unityobject") != -1 ) {
+				cat.tech = Unity;
+				cat.lib = UnityWebPlayer;
+				return;
+			}
+		}
+
+		if( contentStr.indexOf("WP_UnityObject") != -1 ) {
+			cat.tech = Unity;
+			cat.lib = UnityWebPlayer;
+			return;
+		}
+
+		var files = [for( f in jsScripts.concat(flashFiles) ) f.split("/").pop().split("?").shift()];
+		Categorize.check(files, cat);
+
+		if( Categorize.isFinal(cat.tech, cat.lib) )
+			return;
+
+		if( flashFiles.length == 0 && jsScripts.length == 0 ) {
+
+			if( dat.split(".").pop() == "exe" ) {
+				if( cat.tech == null ) cat.tech = Binary;
+				return;
+			}
+
+			log("Don't know what to do with #" + g.uid + "\n" + g.data.links[0].url);
+			return;
+		}
+
+		if( flashFiles.length > 0 ) {
+			cat.tech = Flash;
+			var all = [];
+			for( f in flashFiles ) {
+				var content = downloadData(g, f);
+				if( content == null ) continue;
+				var swf = try {
+					new format.swf.Reader(new haxe.io.BytesInput(content)).read();
+				} catch( e : Dynamic ) {
+					null;
+				}
+				if( swf == null ) continue;
+				var checks = [];
+				for( t in swf.tags )
+					switch( t ) {
+					case TSymbolClass(cl):
+						for( c in cl )
+							checks.push(c.className);
+					case TActionScript3(data, _):
+						var as = try new format.abc.Reader(new haxe.io.BytesInput(data)).read() catch( e : Dynamic ) null;
+						inline function idx<T>(i:format.abc.Data.Index<T>) return switch( i ) { case Idx(i): i; };
+						if( as != null ) {
+							for( cl in as.classes ) {
+								try {
+									switch( as.names[idx(cl.name) - 1] ) {
+									case NName(n, ns):
+										var n = as.strings[idx(n) - 1];
+										var ns = as.namespaces[idx(ns) - 1];
+										switch( ns ) {
+										case NPublic(i):
+											var pack = as.strings[idx(i) - 1];
+											if( pack != "" ) n = pack + "." + n;
+										default:
+										}
+										checks.push(n);
+									default:
+									}
+								} catch( e : Dynamic ) {
+									// ignore
+								}
+							}
+						}
+					default:
+					}
+				var old = cat.lib;
+				all = all.concat(checks);
+				Categorize.check(checks, cat);
+				if( old != null && old != cat.lib )
+					log("CONFLICTING FLASH LIBS " + old + " and " + cat.lib + " FOR #" + g.uid);
+			}
+			//if( cat.lib == null )
+				trace(all);
+		} else {
+
+			var libs : Map<String,{ ?lib : Library, ?tech : Techno }> = [
+				"www.melonjs.org" => { lib : MelonJS },
+				"Phaser v1." => { lib : Phaser },
+				"haxe." => { tech : Haxe },
+			];
+
+			var foundWords = 0;
+			var words = [
+				"canvas", "requestAnimationFrame",
+				"getContext2d(", "drawImage(", "fill(", "putImageData(",
+				"getContextWebGL(", "attachShader(","clear(","texImage2D(","drawArrays(","drawElements("
+			];
+			for( i in 0...words.length ) words[i] = words[i].toLowerCase();
+
+			for( f in jsScripts ) {
+				var content = downloadData(g, f);
+				if( content == null ) continue;
+				var contentStr = content.toString().toLowerCase();
+
+				for( w in words )
+					foundWords += contentStr.split(w).length - 1;
+
+				for( l in libs.keys() )
+					if( contentStr.indexOf(l.toLowerCase()) != -1 ) {
+						var old = cat.lib;
+						var inf = libs.get(l);
+						if( inf.lib != null ) cat.lib = inf.lib;
+						if( inf.tech != null ) cat.tech = inf.tech;
+						if( old != null && old != cat.lib )
+							log("CONFLICTING JS LIBS " + old + " and " + cat.lib + " FOR #" + g.uid);
+						break;
+					}
+			}
+
+			// we are not sure, but let's assume
+			if( cat.tech == null && cat.lib == null && foundWords >= 2 )
+				cat.tech = JS;
+		}
+
+	}
+
+	function downloadData( g : GameInfos, fileUrl : String ) {
+
+		var path = dataDir + "/" + g.uid + "_files";
+
+		if( !sys.FileSystem.exists(path) )
+			sys.FileSystem.createDirectory(path);
+
+		var file = path + "/" + ~/[^A-Za-z0-9_.-]/g.replace(fileUrl, "_");
+		if( sys.FileSystem.exists(file) )
+			return sys.io.File.getBytes(file);
+		log("Fetching " + g.title+"#" + g.uid + " " + fileUrl);
+		try sys.FileSystem.deleteFile(file + ".tmp") catch( e : Dynamic ) { };
+
+		if( !~/^https?:/.match(fileUrl.toLowerCase()) ) {
+
+			// get the relative file from the url
+
+			var url = g.data.links[0].url.split("/");
+			var efile = url.pop();
+
+			if( efile != "" && efile.indexOf(".") == -1 )
+				url.push(efile);
+
+			var baseURL = url.join("/")+"/";
+
+			var args = ["-O", file + ".tmp", "--tries", "3", "--no-check-certificate", baseURL + fileUrl ];
+			if( Sys.command("wget", args) < 0 )
+				return null;
+
+		} else {
+
+			if( Sys.command("wget", ["-O", file + ".tmp", "--tries", "3", "--no-check-certificate", fileUrl]) < 0 )
+				return null;
+		}
+		sys.FileSystem.rename(file + ".tmp", file);
+		return sys.io.File.getBytes(file);
 	}
 
 	function fetchData( g : GameInfos ) {
@@ -273,6 +535,10 @@ class Main {
 		var dat = dataFile(g);
 
 		if( sys.FileSystem.exists(dat) ) return;
+
+		// force direct DL on dropbox
+		if( StringTools.startsWith(url, "https://www.dropbox.com/") && url.split("?").length == 1 )
+			url += "?dl=1";
 
 		log("Saving " + g.title+"#" + g.uid + " (" + l.title + ") " + progress(g));
 
@@ -303,6 +569,16 @@ class Main {
 			wait.pop(true);
 	}
 
+	function cleanSpecial() {
+		for( g in games ) {
+			if( g.data == null || g.data.links.length == 0 ) continue;
+			var url = g.data.links[0].url;
+
+			if( StringTools.startsWith(url, "https://www.dropbox.com/") && url.split("?").length == 1 )
+				try sys.FileSystem.deleteFile(dataFile(g)) catch( e : Dynamic ) { };
+		}
+	}
+
 	static function main() {
 		try {
 			var m = new Main();
@@ -314,6 +590,8 @@ class Main {
 					m.load(Std.parseInt(x));
 				case "-norank":
 					m.rankings = false;
+				case "cleanSpecial":
+					m.cleanSpecial();
 				case "fetch":
 					if( m.ld == null ) throw "Missing #LD";
 					m.fetch();
@@ -324,9 +602,26 @@ class Main {
 				case "categorize":
 					if( m.ld == null ) throw "Missing #LD";
 					var count = 0;
+					var techs = new Map();
 					for( g in m.games ) {
-						m.categorize(g);
-						if( count++ > 10 ) break;
+						var c = m.categorize(g);
+						if( c == null ) continue;
+						if( c.tech == null ) c.tech = Unknown;
+						var libs = techs.get(c.tech.toString());
+						if( libs == null ) {
+							libs = new Map();
+							techs.set(c.tech.toString(), libs);
+						}
+						var lib = c.lib == null ? "null" : c.lib.toString();
+						var n = libs.get(lib);
+						if( n == null ) n = 0;
+						n++;
+						libs.set(lib, n);
+						count++;
+						if( count % 100 == 0 ) {
+							trace("----------------------------------------------------------------");
+							trace(count, techs);
+						}
 					}
 				case x:
 					throw "Unknow arg " + x;
