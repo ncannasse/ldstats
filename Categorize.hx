@@ -18,6 +18,7 @@ abstract Techno(String) {
 	var Haxe = "haxe";
 	var Binary = "binary"; // unknown executable
 	var CantDownloadDirectly = "nodl";
+	var NotAvailable = "na";
 	public function toString() return this;
 }
 
@@ -32,6 +33,7 @@ abstract Library(String) {
 	var SFML = "sfml"; // c++ lib
 	var LWJGL = "lwjgl"; // Java Lib
 	var UnityWebPlayer = "unitywebplayer";
+	var JavaApplet = "javaapplet";
 	var Phaser = "phaser";
 	var MelonJS = "melonjs";
 	var FlashPunk = "flashpunk";
@@ -44,6 +46,8 @@ abstract Library(String) {
 	var EaseIJS = "easeijs";
 	var AXGL = "axgl";
 	var OpenFL = "openfl";
+	var QuintusJS = "quintusjs";
+	var PlayCanvas = "playcanvas"; // WebGL
 	public function toString() return this;
 }
 
@@ -170,11 +174,17 @@ class Categorize {
 				priority : 10,
 			},
 
+		"*.unit3d" => { tech : Unity },
+		"UnityObject2.js" => { tech : Unity },
+
 		"jaws.js" => { tech : JS, lib : JawsJS },
+		"quintus.js" => { tech : JS, lib : QuintusJS },
 
 		"easeljs-[0-9.]+.min.js" => { tech : JS, lib : EaseIJS },
 
 		"org.axgl.*" => { tech : Flash, lib : AXGL },
+
+		"*.class" => { tech : Java, priority : -80 },
 
 		"net.flashpunk.Engine" => {	lib : FlashPunk },
 		"org.flixel.*" => { lib : Flixel },

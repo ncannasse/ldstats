@@ -261,11 +261,15 @@ class Main {
 	}
 
 
+	function baseFile( url : String ) {
+		return url.split("/").pop().split("?").shift();
+	}
+
 	function checkCategory( g : GameInfos, cat : GameCategory, dat : String ) {
 
 		// we don't know how to directly download the file from these :'(
 		var url = g.data.links[0].url;
-		for( r in ["http://gamejolt.com", "https://drive.google.com/file", "https://app.box.com/", "http://www.mediafire.com"] ) {
+		for( r in ["http://gamejolt.com", "https://drive.google.com/file", "https://app.box.com/", "http://www.mediafire.com", "https://mega.co.nz"] ) {
 			if( StringTools.startsWith(url, r) ) {
 				cat.tech = CantDownloadDirectly;
 				return;
@@ -286,7 +290,7 @@ class Main {
 		var content = sys.io.File.getBytes(dat);
 
 		if( content.length == 0 ) {
-			cat.tech = NoData;
+			cat.tech = NotAvailable;
 			return;
 		}
 
@@ -296,8 +300,8 @@ class Main {
 			if( dat.split(".").pop() == "jar" )
 				cat.tech = Java;
 			// ZIP FILE
-			var z = try haxe.zip.Reader.readZip(new haxe.io.BytesInput(content)) catch( e : Dynamic ) { cat.tech = NoData; new List(); };
-			Categorize.check([for( f in z ) f.fileName], cat);
+			var z = try haxe.zip.Reader.readZip(new haxe.io.BytesInput(content)) catch( e : Dynamic ) { cat.tech = NotAvailable; /* 404 html ? */ new List(); };
+			Categorize.check([for( f in z ) f.fileName.split("/").pop()], cat);
 			return;
 		}
 
@@ -338,10 +342,19 @@ class Main {
 			return;
 		}
 
+		if( contentStr.toLowerCase().indexOf('<applet') != -1 ) {
+			cat.tech = Java;
+			cat.lib = JavaApplet;
+			// TODO, download and fetch the library
+			return;
+		}
+
 		var flashFiles = [], jsScripts = [];
 
-		~/["']([-a-zA-Z0-9_.:\/?;=%]+\.[sS][wW][fF])(\?[^'"]*)?["']/g.map(contentStr, function(r) { flashFiles.push(r.matched(1)); return ""; } );
-		~/[sS][rR][cC][ \t]*=[ \t]*["']([-a-zA-Z0-9_.:\/;=%]+\.[jJ][sS](\?[^'"]*)?)["']/g.map(contentStr, function(r) { jsScripts.push(r.matched(1)); return ""; } );
+		~/["']([-a-zA-Z0-9_.:\/?,;=% ]+\.[sS][wW][fF])(\?[^'"]*)?["']/g.map(contentStr, function(r) { flashFiles.push(r.matched(1)); return ""; } );
+		~/[sS][rR][cC][ \t]*=[ \t]*["']([-a-zA-Z0-9_.:\/,;=% ]+\.[jJ][sS](\?[^'"]*)?)["']/g.map(contentStr, function(r) { jsScripts.push(r.matched(1)); return ""; } );
+		// for require.js
+		~/data-main[ \t]*=[ \t]*["']([-a-zA-Z0-9_.:\/,;=% ]+\.[jJ][sS](\?[^'"]*)?)["']/g.map(contentStr, function(r) { jsScripts.push(r.matched(1)); return ""; } );
 
 		for( f in flashFiles.copy() ) {
 			var fl = f.toLowerCase();
@@ -353,9 +366,14 @@ class Main {
 			}
 		}
 
+		if( baseFile(url).split(".").pop() == "swf" )
+			flashFiles.push(baseFile(url));
+		if( baseFile(url).split(".").pop() == "js" )
+			jsScripts.push(baseFile(url));
+
 		for( s in jsScripts.copy() ) {
 			var sl = s.toLowerCase();
-			for( r in ["angularjs", "bootstrap.min", "facebook.net", "apis.google.com", "jquery", "swfobject","show_ads","twitter.com","facebook.com","modernizr","boxcdn.net","cloudfront.net","gravatar.com",".wp.com","google-analytics.com"] )
+			for( r in ["require.js", "angularjs", "bootstrap.min", "facebook.net", "apis.google.com", "jquery", "swfobject","show_ads","twitter.com","facebook.com","modernizr","boxcdn.net","cloudfront.net","gravatar.com",".wp.com","google-analytics.com"] )
 				if( sl.indexOf(r) != -1 ) {
 					jsScripts.remove(s);
 					break;
@@ -373,25 +391,26 @@ class Main {
 			return;
 		}
 
-		var files = [for( f in jsScripts.concat(flashFiles) ) f.split("/").pop().split("?").shift()];
+		var files = [for( f in jsScripts.concat(flashFiles) ) baseFile(f)];
 		Categorize.check(files, cat);
 
 		if( Categorize.isFinal(cat.tech, cat.lib) )
 			return;
 
 		if( flashFiles.length == 0 && jsScripts.length == 0 ) {
+			if( ~/<script([^<]*?)[\r\n]/.match(contentStr.toLowerCase()) )
+				jsScripts.push(null); // consider that the html files contains the html script
+		}
 
-			if( dat.split(".").pop() == "exe" ) {
-				if( cat.tech == null ) cat.tech = Binary;
-				return;
-			}
-
-			log("Don't know what to do with #" + g.uid + "\n" + g.data.links[0].url);
+		if( flashFiles.length == 0 && jsScripts.length == 0 ) {
+			if( cat.tech == null )
+				Categorize.check([baseFile(url)], cat);
+			if( cat.tech == null )
+				log("Don't know what to do with #" + g.uid + "\n" + g.data.links[0].url);
 			return;
 		}
 
 		if( flashFiles.length > 0 ) {
-			cat.tech = Flash;
 			var all = [];
 			for( f in flashFiles ) {
 				var content = downloadData(g, f);
@@ -440,6 +459,8 @@ class Main {
 				if( old != null && old != cat.lib )
 					log("CONFLICTING FLASH LIBS " + old + " and " + cat.lib + " FOR #" + g.uid);
 			}
+			if( cat.tech == null && all.length > 0 )
+				cat.tech = Flash;
 			//if( cat.lib == null )
 				trace(all);
 		} else {
@@ -448,10 +469,13 @@ class Main {
 				"www.melonjs.org" => { lib : MelonJS },
 				"Phaser v1." => { lib : Phaser },
 				"haxe." => { tech : Haxe },
+				"yoyogames.com" => { tech : GameMaker },
+				"apps.playcanvas.com" => { lib : PlayCanvas },
 			];
 
 			var foundWords = 0;
 			var words = [
+				"ld"+this.ld,"ld"+this.ld,"ld"+this.ld, // force JS if we have found
 				"canvas", "requestAnimationFrame",
 				"getContext2d(", "drawImage(", "fill(", "putImageData(",
 				"getContextWebGL(", "attachShader(","clear(","texImage2D(","drawArrays(","drawElements("
@@ -459,9 +483,9 @@ class Main {
 			for( i in 0...words.length ) words[i] = words[i].toLowerCase();
 
 			for( f in jsScripts ) {
-				var content = downloadData(g, f);
+				var content = f == null ? content : downloadData(g, f);
 				if( content == null ) continue;
-				var contentStr = content.toString().toLowerCase();
+				var contentStr = (url + f + content.toString()).toLowerCase();
 
 				for( w in words )
 					foundWords += contentStr.split(w).length - 1;
@@ -478,9 +502,18 @@ class Main {
 					}
 			}
 
+			if( cat.lib != null && cat.tech == null ) cat.tech = JS;
+
 			// we are not sure, but let's assume
-			if( cat.tech == null && cat.lib == null && foundWords >= 2 )
-				cat.tech = JS;
+			if( cat.tech == null && cat.lib == null ) {
+				if( foundWords >= 2 )
+					cat.tech = JS;
+				else if( jsScripts[0] == "/static/javascript/external/html5shiv.js" )
+					cat.tech = NotAvailable; // DropBox 404
+				else
+					log("Could not detect game in JS files #"+g.uid+" " + jsScripts+" in "+url);
+			}
+
 		}
 
 	}
@@ -503,7 +536,7 @@ class Main {
 			// get the relative file from the url
 
 			var url = g.data.links[0].url.split("/");
-			var efile = url.pop();
+			var efile = url.length <= 3 ? "" : url.pop();
 
 			if( efile != "" && efile.indexOf(".") == -1 )
 				url.push(efile);
@@ -599,6 +632,14 @@ class Main {
 					if( m.ld == null ) throw "Missing #LD";
 					if( !sys.FileSystem.exists(m.dataDir) ) sys.FileSystem.createDirectory(m.dataDir);
 					m.fetchGameDatas();
+				case "only":
+					var gd = Std.parseInt(args[i++]);
+					for( g in m.games )
+						if( g.uid == gd ) {
+							m.games = [g];
+							break;
+						}
+					if( m.games.length > 1 ) throw "Game #"+gd+" not found";
 				case "categorize":
 					if( m.ld == null ) throw "Missing #LD";
 					var count = 0;
