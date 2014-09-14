@@ -9,7 +9,6 @@ abstract Techno(String) {
 	var GameMaker = "gamemaker";
 	var Unity = "unity";
 	var Unknown = "unknown";
-	var NoData = "nodata"; // we couldn't tell
 	var JS = "js";
 	var Flash = "flash";
 	var Dart = "dart";
@@ -240,7 +239,7 @@ class Categorize {
 		switch( tech ) {
 		case Dart, Unity, GameMaker, Construct2, Stencyl:
 			return true;
-		case CantDownloadDirectly, NoData:
+		case CantDownloadDirectly, NotAvailable:
 			return true;
 		default:
 		}

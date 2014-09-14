@@ -19,7 +19,7 @@ typedef GameInfos = {
 	var title : String;
 	var user : String;
 	@:optional var data : GameData;
-	@:optional var category : GameCategory;
+	@:optional var cat : GameCategory;
 }
 
 typedef GameData = {
@@ -220,6 +220,7 @@ class Main {
 	}
 
 	function save() {
+		if( dbFile == null ) return;
 		sys.io.File.saveContent(dbFile, haxe.Json.stringify(games, null, "\t"));
 	}
 
@@ -256,7 +257,10 @@ class Main {
 		//if( Categorize.isFinal(cat.tech, cat.lib) )
 		//	sys.FileSystem.deleteFile(dat);
 
-		trace(g.uid, cat);
+		if( cat.tech == null ) Reflect.deleteField(cat, "tech");
+		if( cat.lib == null ) Reflect.deleteField(cat, "lib");
+
+		g.cat = cat;
 		return cat;
 	}
 
@@ -648,31 +652,34 @@ class Main {
 					for( g in m.games )
 						if( g.uid == gd ) {
 							m.games = [g];
+							m.dbFile = null; // no save!
 							break;
 						}
 					if( m.games.length > 1 ) throw "Game #"+gd+" not found";
+				case "overall":
+					var rank = Std.parseInt(args[i++]);
+					var sel = [];
+					for( g in m.games )
+						if( g.data != null && g.data.rankings[Overall.toInt()] != null && g.data.rankings[Overall.toInt()] <= rank )
+							sel.push(g);
+					m.dbFile = null; // no save!
+					m.games = sel;
 				case "categorize":
 					if( m.ld == null ) throw "Missing #LD";
-					var count = 0;
-					var techs = new Map();
+					var stats = new Stats();
 					for( g in m.games ) {
 						var c = m.categorize(g);
-						if( c == null ) continue;
-						if( c.tech == null ) c.tech = Unknown;
-						var libs = techs.get(c.tech.toString());
-						if( libs == null ) {
-							libs = new Map();
-							techs.set(c.tech.toString(), libs);
-						}
-						var lib = c.lib == null ? "null" : c.lib.toString();
-						var n = libs.get(lib);
-						if( n == null ) n = 0;
-						n++;
-						libs.set(lib, n);
-						count++;
+						stats.add(g);
+						if( stats.count % 100 == 0 ) m.save();
 					}
-					trace("----------------------------------------------------------------");
-					trace(count, techs);
+					m.save();
+					Sys.println("----------------------------------------------------------------");
+					Sys.println(stats.toString());
+				case "stats":
+					var stats = new Stats();
+					for( g in m.games )
+						stats.add(g);
+					Sys.println(stats.toString());
 				case x:
 					throw "Unknow arg " + x;
 				}
