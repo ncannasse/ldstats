@@ -269,7 +269,7 @@ class Main {
 
 		// we don't know how to directly download the file from these :'(
 		var url = g.data.links[0].url;
-		for( r in ["http://gamejolt.com", "https://drive.google.com/file", "https://app.box.com/", "http://www.mediafire.com", "https://mega.co.nz"] ) {
+		for( r in ["http://gamejolt.com", "https://sites.google.com", "https://drive.google.com/file", "https://app.box.com/", "http://www.mediafire.com", "https://mega.co.nz", "https://github.com/"] ) {
 			if( StringTools.startsWith(url, r) ) {
 				cat.tech = CantDownloadDirectly;
 				return;
@@ -358,7 +358,7 @@ class Main {
 
 		for( f in flashFiles.copy() ) {
 			var fl = f.toLowerCase();
-			for( r in ["expressinstall.swf", "internal.kongregate.com","googlevideoadshell","cdn2.kongcdn.com", "cloudfront.net"] ) {
+			for( r in ["expressinstall.swf", "playerProductInstall.swf", "internal.kongregate.com","googlevideoadshell","cdn2.kongcdn.com", "cloudfront.net"] ) {
 				if( fl.indexOf(r) != -1 ) {
 					flashFiles.remove(f);
 					break;
@@ -373,7 +373,7 @@ class Main {
 
 		for( s in jsScripts.copy() ) {
 			var sl = s.toLowerCase();
-			for( r in ["require.js", "angularjs", "bootstrap.min", "facebook.net", "apis.google.com", "jquery", "swfobject","show_ads","twitter.com","facebook.com","modernizr","boxcdn.net","cloudfront.net","gravatar.com",".wp.com","google-analytics.com"] )
+			for( r in [".mediafire.com", "ssl.gstatic.com", "caja.js", "require.js", "angularjs", "bootstrap.min", "facebook.net", "apis.google.com", "jquery", "swfobject","show_ads","twitter.com","facebook.com","modernizr","boxcdn.net","cloudfront.net","gravatar.com",".wp.com","google-analytics.com"] )
 				if( sl.indexOf(r) != -1 ) {
 					jsScripts.remove(s);
 					break;
@@ -462,15 +462,25 @@ class Main {
 			if( cat.tech == null && all.length > 0 )
 				cat.tech = Flash;
 			//if( cat.lib == null )
-				trace(all);
+			//	trace(all);
 		} else {
 
 			var libs : Map<String,{ ?lib : Library, ?tech : Techno }> = [
 				"www.melonjs.org" => { lib : MelonJS },
+				"melonJS-" => { lib : MelonJS },
 				"Phaser v1." => { lib : Phaser },
+				"Photon Storm" => { lib : Phaser },
 				"haxe." => { tech : Haxe },
 				"yoyogames.com" => { tech : GameMaker },
 				"apps.playcanvas.com" => { lib : PlayCanvas },
+				"dart2js" => { tech : Dart },
+				"craftyjs.com" => { lib : CraftyJS },
+				"crafty.js" => { lib : CraftyJS },
+				"crafty-min.js" => { lib : CraftyJS },
+				"Three.js" => { lib : ThreeJS },
+				"mrdoob.com" => { lib : ThreeJS },
+				"love.render.js" => { tech : Lua, lib : Love },
+				"Pixi.JS - v" => { lib : PixiJS },
 			];
 
 			var foundWords = 0;
@@ -496,9 +506,10 @@ class Main {
 						var inf = libs.get(l);
 						if( inf.lib != null ) cat.lib = inf.lib;
 						if( inf.tech != null ) cat.tech = inf.tech;
-						if( old != null && old != cat.lib )
+						if( old != null && old != cat.lib ) {
+							if( old == ThreeJS && cat.lib == PixiJS ) continue;
 							log("CONFLICTING JS LIBS " + old + " and " + cat.lib + " FOR #" + g.uid);
-						break;
+						}
 					}
 			}
 
@@ -506,10 +517,10 @@ class Main {
 
 			// we are not sure, but let's assume
 			if( cat.tech == null && cat.lib == null ) {
-				if( foundWords >= 2 )
-					cat.tech = JS;
-				else if( jsScripts[0] == "/static/javascript/external/html5shiv.js" )
+				if( jsScripts[0] == "/static/javascript/external/html5shiv.js" )
 					cat.tech = NotAvailable; // DropBox 404
+				else if( foundWords >= 2 )
+					cat.tech = JS;
 				else
 					log("Could not detect game in JS files #"+g.uid+" " + jsScripts+" in "+url);
 			}
@@ -659,11 +670,9 @@ class Main {
 						n++;
 						libs.set(lib, n);
 						count++;
-						if( count % 100 == 0 ) {
-							trace("----------------------------------------------------------------");
-							trace(count, techs);
-						}
 					}
+					trace("----------------------------------------------------------------");
+					trace(count, techs);
 				case x:
 					throw "Unknow arg " + x;
 				}

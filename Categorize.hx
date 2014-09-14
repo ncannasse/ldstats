@@ -48,6 +48,9 @@ abstract Library(String) {
 	var OpenFL = "openfl";
 	var QuintusJS = "quintusjs";
 	var PlayCanvas = "playcanvas"; // WebGL
+	var PixiJS = "pixijs";
+	var CraftyJS = "craftyjs";
+	var ThreeJS = "threejs";
 	public function toString() return this;
 }
 
